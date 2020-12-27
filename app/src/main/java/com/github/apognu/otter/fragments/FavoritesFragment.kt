@@ -1,6 +1,9 @@
 package com.github.apognu.otter.fragments
 
+import android.annotation.SuppressLint
 import android.os.Bundle
+import android.view.Gravity
+import android.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import com.github.apognu.otter.R
@@ -10,11 +13,16 @@ import com.github.apognu.otter.repositories.TracksRepository
 import com.github.apognu.otter.utils.*
 import com.google.android.exoplayer2.offline.Download
 import kotlinx.android.synthetic.main.fragment_favorites.*
+import kotlinx.android.synthetic.main.fragment_favorites.play
+import kotlinx.android.synthetic.main.fragment_tracks.*
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.lang.Exception
+import java.text.SimpleDateFormat
+import java.util.*
 
 class FavoritesFragment : OtterFragment<Track, FavoritesAdapter>() {
   override val viewRes = R.layout.fragment_favorites
@@ -30,6 +38,7 @@ class FavoritesFragment : OtterFragment<Track, FavoritesAdapter>() {
     watchEventBus()
   }
 
+  @SuppressLint("SimpleDateFormat")
   override fun onResume() {
     super.onResume()
 
@@ -46,6 +55,47 @@ class FavoritesFragment : OtterFragment<Track, FavoritesAdapter>() {
 
     play.setOnClickListener {
       CommandBus.send(Command.ReplaceQueue(adapter.data.shuffled()))
+    }
+
+    context?.let { context ->
+      sort.setOnClickListener {
+        PopupMenu(context, actions, Gravity.START, R.attr.actionOverflowMenuStyle, 0).apply {
+          inflate(R.menu.sort)
+          setOnMenuItemClickListener {
+            when (it.itemId) {
+              R.id.title -> {
+                adapter.data.sortBy { it.title }
+                adapter.notifyDataSetChanged()
+              }
+              R.id.recently_added -> {
+                val df = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'")
+                val df2 = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'")
+
+                df.timeZone = TimeZone.getTimeZone("GMT")
+                df2.timeZone = TimeZone.getTimeZone("GMT")
+
+                adapter.data.forEach {
+                  try {
+                    it.creation_date_obj = df.parse(it.creation_date)
+                  } catch (e: Exception) {
+                    try {
+                      it.creation_date_obj = df2.parse(it.creation_date)
+                    } catch (e: Exception) {
+
+                    }
+                  }
+                }
+                adapter.data.sortByDescending {
+                  it.creation_date_obj
+                }
+                adapter.notifyDataSetChanged()
+              }
+            }
+
+            true
+          }
+        }.show()
+      }
     }
   }
 
@@ -83,7 +133,10 @@ class FavoritesFragment : OtterFragment<Track, FavoritesAdapter>() {
   private suspend fun refreshDownloadedTrack(download: Download) {
     if (download.state == Download.STATE_COMPLETED) {
       download.getMetadata()?.let { info ->
-        adapter.data.withIndex().associate { it.value to it.index }.filter { it.key.id == info.id }.toList().getOrNull(0)?.let { match ->
+        adapter.data.withIndex().associate { it.value to it.index }.filter { it.key.id == info.id }
+          .toList().getOrNull(
+            0
+          )?.let { match ->
           withContext(Main) {
             adapter.data[match.second].downloaded = true
             adapter.notifyItemChanged(match.second)

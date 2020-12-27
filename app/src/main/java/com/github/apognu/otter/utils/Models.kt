@@ -2,6 +2,7 @@ package com.github.apognu.otter.utils
 
 import com.google.android.exoplayer2.offline.Download
 import com.preference.PowerPreference
+import java.util.*
 
 data class User(
   val full_username: String
@@ -102,6 +103,8 @@ data class Track(
   val artist: Artist,
   val album: Album?,
   val disc_number: Int = 0,
+  val creation_date: String? = null,
+  var creation_date_obj: Date? = null,
   val position: Int = 0,
   val uploads: List<Upload> = listOf(),
   val copyright: String? = null,
