@@ -1,5 +1,7 @@
 package com.github.apognu.otter.fragments
 
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -47,7 +49,11 @@ abstract class OtterFragment<D : Any, A : OtterAdapter<D, *>> : Fragment() {
   private var moreLoading = false
   private var listener: Job? = null
 
-  override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+  override fun onCreateView(
+    inflater: LayoutInflater,
+    container: ViewGroup?,
+    savedInstanceState: Bundle?
+  ): View? {
     return inflater.inflate(viewRes, container, false)
   }
 
@@ -105,10 +111,80 @@ abstract class OtterFragment<D : Any, A : OtterAdapter<D, *>> : Fragment() {
     fetch(Repository.Origin.Network.origin)
   }
 
+  private fun isAnyNetworkAvailable(): Boolean {
+    val connectivityManager = context?.getSystemService(ConnectivityManager::class.java)
+    val currentNetwork = connectivityManager?.activeNetwork
+    val caps = connectivityManager?.getNetworkCapabilities(currentNetwork)
+
+    return caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+  }
+
   open fun onDataFetched(data: List<D>) {}
 
-  private fun fetch(upstreams: Int = Repository.Origin.Network.origin, size: Int = 0) {
+  private fun fetch(
+    upstreams: Int = Repository.Origin.Network.origin, size: Int = 0
+  ) {
+
     var first = size == 0
+    moreLoading = true
+
+    val isNetworkAvailable = isAnyNetworkAvailable()
+
+    // Take data from cache if there's no available network
+    if (!isNetworkAvailable) {
+      repository.fetch(Repository.Origin.Cache.origin, size)
+        .untilNetwork(lifecycleScope, IO) { data, isCache, page, hasMore ->
+          lifecycleScope.launch(Main) {
+            if (isCache) {
+              moreLoading = false
+
+              adapter.data = data.toMutableList()
+              adapter.notifyDataSetChanged()
+            }
+
+            if (first) {
+              adapter.data.clear()
+            }
+
+            onDataFetched(data)
+
+            adapter.data.addAll(data)
+
+            if (hasMore) {
+              (repository.upstream as? HttpUpstream<*, *>)?.let { upstream ->
+                if (!isCache && upstream.behavior == HttpUpstream.Behavior.Progressive) {
+                  if (first || needsMoreOffscreenPages()) {
+                    fetch(Repository.Origin.Network.origin, adapter.data.size)
+                  } else {
+                    moreLoading = false
+                  }
+                } else {
+                  moreLoading = false
+                }
+              }
+            }
+
+            (repository.upstream as? HttpUpstream<*, *>)?.let { upstream ->
+              when (upstream.behavior) {
+                HttpUpstream.Behavior.Progressive -> if (!hasMore || !moreLoading) swiper?.isRefreshing =
+                  false
+                HttpUpstream.Behavior.AtOnce -> if (!hasMore) swiper?.isRefreshing = false
+                HttpUpstream.Behavior.Single -> if (!hasMore) swiper?.isRefreshing = false
+              }
+            }
+
+            when (first) {
+              true -> {
+                adapter.notifyDataSetChanged()
+                first = false
+              }
+
+              false -> adapter.notifyItemRangeInserted(adapter.data.size, data.size)
+            }
+          }
+        }
+      return
+    }
 
     if (!moreLoading && upstreams == Repository.Origin.Network.origin) {
       lifecycleScope.launch(Main) {
@@ -116,78 +192,79 @@ abstract class OtterFragment<D : Any, A : OtterAdapter<D, *>> : Fragment() {
       }
     }
 
-    moreLoading = true
-
-    repository.fetch(upstreams, size).untilNetwork(lifecycleScope, IO) { data, isCache, _, hasMore ->
-      if (isCache && data.isEmpty()) {
-        moreLoading = false
-
-        return@untilNetwork fetch(Repository.Origin.Network.origin)
-      }
-
-      lifecycleScope.launch(Main) {
-        if (isCache) {
+    repository.fetch(upstreams, size)
+      .untilNetwork(lifecycleScope, IO)
+      { data, isCache, _, hasMore ->
+        if (isCache && data.isEmpty()) {
           moreLoading = false
 
-          adapter.data = data.toMutableList()
-          adapter.notifyDataSetChanged()
-
-          return@launch
+          return@untilNetwork fetch(Repository.Origin.Network.origin)
         }
 
-        if (first) {
-          adapter.data.clear()
-        }
+        lifecycleScope.launch(Main) {
+          if (isCache) {
+            moreLoading = false
 
-        onDataFetched(data)
+            adapter.data = data.toMutableList()
+            adapter.notifyDataSetChanged()
 
-        adapter.data.addAll(data)
-
-        withContext(IO) {
-          try {
-            repository.cacheId?.let { cacheId ->
-              Cache.set(
-                context,
-                cacheId,
-                Gson().toJson(repository.cache(adapter.data)).toByteArray()
-              )
-            }
-          } catch (e: ConcurrentModificationException) {
+            return@launch
           }
-        }
 
-        if (hasMore) {
-          (repository.upstream as? HttpUpstream<*, *>)?.let { upstream ->
-            if (!isCache && upstream.behavior == HttpUpstream.Behavior.Progressive) {
-              if (first || needsMoreOffscreenPages()) {
-                fetch(Repository.Origin.Network.origin, adapter.data.size)
+          if (first) {
+            adapter.data.clear()
+          }
+
+          onDataFetched(data)
+
+          adapter.data.addAll(data)
+
+          withContext(IO) {
+            try {
+              repository.cacheId?.let { cacheId ->
+                Cache.set(
+                  context,
+                  cacheId,
+                  Gson().toJson(repository.cache(adapter.data)).toByteArray()
+                )
+              }
+            } catch (e: ConcurrentModificationException) {
+            }
+          }
+
+          if (hasMore) {
+            (repository.upstream as? HttpUpstream<*, *>)?.let { upstream ->
+              if (!isCache && upstream.behavior == HttpUpstream.Behavior.Progressive) {
+                if (first || needsMoreOffscreenPages()) {
+                  fetch(Repository.Origin.Network.origin, adapter.data.size)
+                } else {
+                  moreLoading = false
+                }
               } else {
                 moreLoading = false
               }
-            } else {
-              moreLoading = false
             }
           }
-        }
 
-        (repository.upstream as? HttpUpstream<*, *>)?.let { upstream ->
-          when (upstream.behavior) {
-            HttpUpstream.Behavior.Progressive -> if (!hasMore || !moreLoading) swiper?.isRefreshing = false
-            HttpUpstream.Behavior.AtOnce -> if (!hasMore) swiper?.isRefreshing = false
-            HttpUpstream.Behavior.Single -> if (!hasMore) swiper?.isRefreshing = false
-          }
-        }
-
-        when (first) {
-          true -> {
-            adapter.notifyDataSetChanged()
-            first = false
+          (repository.upstream as? HttpUpstream<*, *>)?.let { upstream ->
+            when (upstream.behavior) {
+              HttpUpstream.Behavior.Progressive -> if (!hasMore || !moreLoading) swiper?.isRefreshing =
+                false
+              HttpUpstream.Behavior.AtOnce -> if (!hasMore) swiper?.isRefreshing = false
+              HttpUpstream.Behavior.Single -> if (!hasMore) swiper?.isRefreshing = false
+            }
           }
 
-          false -> adapter.notifyItemRangeInserted(adapter.data.size, data.size)
+          when (first) {
+            true -> {
+              adapter.notifyDataSetChanged()
+              first = false
+            }
+
+            false -> adapter.notifyItemRangeInserted(adapter.data.size, data.size)
+          }
         }
       }
-    }
   }
 
   private fun needsMoreOffscreenPages(): Boolean {
