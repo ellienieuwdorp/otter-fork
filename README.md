@@ -2,7 +2,8 @@
 This is my personal fork of Otter for Funkwhale. I'm planning to work on several improvements to Otter here, including but not limited to:
 * Improvements to the offline experience or the situation when the connected funkwhale instance is down
 * Some UI changes
-* Easier downloading favorited tracks
+* Extra sorting capabilities
+* Easier downloading of favorited tracks
 * Embedded lyrics support
 
 I'll see how much of this I can manage to implement, if you have any ideas or suggestions that aren't too large feel free to ask me (: If you're curious about Otter in general read the project readme below!
