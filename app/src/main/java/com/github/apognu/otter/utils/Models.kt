@@ -104,7 +104,6 @@ data class Track(
   val album: Album?,
   val disc_number: Int = 0,
   val creation_date: String? = null,
-  var creation_date_obj: Date? = null,
   val position: Int = 0,
   val uploads: List<Upload> = listOf(),
   val copyright: String? = null,
@@ -116,6 +115,8 @@ data class Track(
   var downloaded: Boolean = false
 
   companion object {
+    var df: SimpleDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'")
+
     fun fromDownload(download: DownloadInfo): Track = Track(
       id = download.id,
       title = download.title,
@@ -123,6 +124,14 @@ data class Track(
       album = Album(0, Album.Artist(""), "", Covers(CoverUrls("")), ""),
       uploads = listOf(Upload(download.contentId, 0, 0))
     )
+  }
+
+  fun getDate(): Date? {
+    return try {
+      df.parse(creation_date)
+    } catch (e: Exception) {
+      null
+    };
   }
 
   data class Upload(
