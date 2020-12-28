@@ -68,30 +68,10 @@ class FavoritesFragment : OtterFragment<Track, FavoritesAdapter>() {
                 adapter.notifyDataSetChanged()
               }
               R.id.recently_added -> {
-                val df = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'")
-                val df2 = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'")
-
-                df.timeZone = TimeZone.getTimeZone("GMT")
-                df2.timeZone = TimeZone.getTimeZone("GMT")
-
-                adapter.data.forEach {
-                  try {
-                    it.creation_date_obj = df.parse(it.creation_date)
-                  } catch (e: Exception) {
-                    try {
-                      it.creation_date_obj = df2.parse(it.creation_date)
-                    } catch (e: Exception) {
-
-                    }
-                  }
-                }
-                adapter.data.sortByDescending {
-                  it.creation_date_obj
-                }
+                adapter.data.sortByDescending { it.getDate() }
                 adapter.notifyDataSetChanged()
               }
             }
-
             true
           }
         }.show()
