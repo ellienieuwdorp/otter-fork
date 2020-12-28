@@ -59,7 +59,7 @@ class FavoritesFragment : OtterFragment<Track, FavoritesAdapter>() {
 
     context?.let { context ->
       sort.setOnClickListener {
-        PopupMenu(context, actions, Gravity.START, R.attr.actionOverflowMenuStyle, 0).apply {
+        PopupMenu(context, sort, Gravity.END, R.attr.actionOverflowMenuStyle, 0).apply {
           inflate(R.menu.sort)
           setOnMenuItemClickListener {
             when (it.itemId) {
