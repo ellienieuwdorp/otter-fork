@@ -1,4 +1,7 @@
-# Otter for Funkwhale
+# ARCHIVED REPO
+This repo is no longer being worked on, there is now an official fork of Otter by the Funkwhale project. Find it [here](https://dev.funkwhale.audio/funkwhale/funkwhale-android).
+
+## Otter for Funkwhale
 This is my personal fork of Otter for Funkwhale. I'm planning to work on several improvements to Otter here, including but not limited to:
 * Improvements to the offline experience or the situation when the connected funkwhale instance is down
 * Some UI changes
